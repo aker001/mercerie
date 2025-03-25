@@ -27,38 +27,34 @@ const ui = {
   loginSection: document.getElementById('loginSection'),
   loginForm: document.getElementById('loginForm'),
   appSection: document.getElementById('appSection'),
-  closeBtn: document.querySelector('.close-btn')
+  closeBtn: document.querySelector('.close-btn'),
+  summarySection: document.getElementById('summarySection') // New summary section
 };
 let products = [];
 let editIndex = null; // Track the product being edited
 const DEFAULT_IMAGE = 'placeholder.jpg';
-
 // DOM Elements for Image Modal
 const uiImageModal = {
   imageModal: document.getElementById('imageModal'),
   enlargedImage: document.getElementById('enlargedImage'),
   closeBtn: document.querySelector('#imageModal .close-btn')
 };
-
 // Show Loading
 function showLoading() {
   if (ui.loadingOverlay) {
     ui.loadingOverlay.style.display = 'flex';
   }
 }
-
 // Hide Loading
 function hideLoading() {
   if (ui.loadingOverlay) {
     ui.loadingOverlay.style.display = 'none';
   }
 }
-
 // Initialize App
 function init() {
   checkLoginStatus();
 }
-
 // Check Login Status
 function checkLoginStatus() {
   auth.onAuthStateChanged((user) => {
@@ -73,7 +69,6 @@ function checkLoginStatus() {
     }
   });
 }
-
 // Setup Event Listeners
 function setupEventListeners() {
   if (ui.logoutBtn) {
@@ -102,7 +97,6 @@ function setupEventListeners() {
   if (ui.darkModeToggle) {
     ui.darkModeToggle.addEventListener('click', toggleDarkMode);
   }
-
   // Add Event Listeners for Image Modal
   if (uiImageModal.closeBtn) {
     uiImageModal.closeBtn.addEventListener('click', hideEnlargedImage);
@@ -115,20 +109,17 @@ function setupEventListeners() {
     });
   }
 }
-
 // Toggle Dark Mode
 function toggleDarkMode() {
   document.body.classList.toggle('dark-mode');
   localStorage.setItem('darkMode', document.body.classList.contains('dark-mode'));
 }
-
 // Check for saved dark mode preference
 function checkDarkModePreference() {
   if (localStorage.getItem('darkMode') === 'true') {
     document.body.classList.add('dark-mode');
   }
 }
-
 // Login Functionality
 if (ui.loginForm) {
   ui.loginForm.addEventListener('submit', (e) => {
@@ -143,7 +134,6 @@ if (ui.loginForm) {
       });
   });
 }
-
 // Load Products from Firestore
 function loadProducts() {
   showLoading();
@@ -154,6 +144,7 @@ function loadProducts() {
         products.push({ id: doc.id, ...doc.data() });
       });
       renderProducts();
+      calculateSummary(); // Calculate totals after rendering products
       hideLoading();
     })
     .catch((error) => {
@@ -161,7 +152,6 @@ function loadProducts() {
       hideLoading();
     });
 }
-
 // Render Products
 function renderProducts() {
   ui.productsBody.innerHTML = '';
@@ -170,7 +160,6 @@ function renderProducts() {
     ui.productsBody.appendChild(row);
   });
 }
-
 // Create Product Row
 function createProductRow(product, index) {
   const row = document.createElement('tr');
@@ -199,7 +188,6 @@ function createProductRow(product, index) {
   // Add event listeners to the buttons
   row.querySelector('.edit-btn').addEventListener('click', () => showEditModal(index));
   row.querySelector('.delete-btn').addEventListener('click', () => deleteProduct(index));
-
   // Add click event to the image
   const imageElement = row.querySelector('.image-preview');
   if (imageElement) {
@@ -207,10 +195,31 @@ function createProductRow(product, index) {
       showEnlargedImage(product.imageUrl || DEFAULT_IMAGE);
     });
   }
-
   return row;
 }
+// Calculate Summary Totals
+function calculateSummary() {
+  const totalQuantity = products.reduce((sum, product) => sum + (product.quantity || 0), 0);
+  const totalProfitPercentage = products.reduce((sum, product) => {
+    if (product.buyPrice > 0 && product.sellPrice) {
+      const profitPercentage = ((product.sellPrice - product.buyPrice) / product.buyPrice) * 100;
+      return sum + profitPercentage;
+    }
+    return sum;
+  }, 0);
 
+  // Update the summary section in the UI
+  if (ui.summarySection) {
+    ui.summarySection.innerHTML = `
+      <div class="summary-item">
+        <strong>Total Quantity:</strong> ${totalQuantity}
+      </div>
+      <div class="summary-item">
+        <strong>Total Profit Percentage:</strong> ${totalProfitPercentage.toFixed(2)}%
+      </div>
+    `;
+  }
+}
 // Create Edit Form
 function createEditForm() {
   ui.editForm.innerHTML = `
@@ -220,7 +229,7 @@ function createEditForm() {
     </div>
     <div class="form-group">
       <label for="productSerial">Serial Number</label>
-      <input type="text" id="productSerial">
+      <input type="text" id="productSerial" required>
     </div>
     <div class="form-group">
       <label for="productQuantity">Quantity</label>
@@ -266,7 +275,6 @@ function createEditForm() {
     saveProduct();
   });
 }
-
 // Show Edit Modal
 function showEditModal(index) {
   editIndex = index;
@@ -286,16 +294,29 @@ function showEditModal(index) {
   }
   ui.editModal.style.display = 'block';
 }
-
 // Save Product to Firestore
 function saveProduct() {
+  const productName = document.getElementById('productName').value.trim();
+  const productSerial = document.getElementById('productSerial').value.trim();
+  const productQuantity = parseInt(document.getElementById('productQuantity').value.trim()) || 0;
+  const productBuyPrice = parseFloat(document.getElementById('productBuyPrice').value.trim()) || 0;
+  const productSellPrice = parseFloat(document.getElementById('productSellPrice').value.trim()) || 0;
+
+  // Validate unique serial number
+  const existingProduct = products.find((product, idx) => product.serial === productSerial && idx !== editIndex);
+  if (existingProduct) {
+    alert('A product with this serial number already exists.');
+    return;
+  }
+
   const productData = {
-    name: document.getElementById('productName').value.trim(),
-    serial: document.getElementById('productSerial').value.trim(),
-    quantity: parseInt(document.getElementById('productQuantity').value.trim()) || 0,
-    buyPrice: parseFloat(document.getElementById('productBuyPrice').value.trim()) || 0,
-    sellPrice: parseFloat(document.getElementById('productSellPrice').value.trim()) || 0,
+    name: productName,
+    serial: productSerial,
+    quantity: productQuantity,
+    buyPrice: productBuyPrice,
+    sellPrice: productSellPrice,
   };
+
   // Handle the image
   const imageInput = document.getElementById('productImage');
   if (imageInput && imageInput.files && imageInput.files[0]) {
@@ -325,7 +346,6 @@ function saveProduct() {
     saveToFirestore(productData);
   }
 }
-
 // Helper function to save to Firestore
 function saveToFirestore(productData) {
   if (editIndex !== null) {
@@ -355,7 +375,6 @@ function saveToFirestore(productData) {
       });
   }
 }
-
 // Delete Product
 function deleteProduct(index) {
   if (confirm('Are you sure you want to delete this product?')) {
@@ -373,7 +392,6 @@ function deleteProduct(index) {
       });
   }
 }
-
 // Search Products
 function searchProducts() {
   const searchTerm = ui.searchInput.value.toLowerCase();
@@ -388,8 +406,8 @@ function searchProducts() {
     const row = createProductRow(product, originalIndex);
     ui.productsBody.appendChild(row);
   });
+  calculateSummary(); // Recalculate summary after filtering
 }
-
 // Export to CSV
 function exportToCSV() {
   let csvContent = "data:text/csv;charset=utf-8,";
@@ -413,7 +431,6 @@ function exportToCSV() {
   link.click();
   document.body.removeChild(link);
 }
-
 // Compress image before storing
 async function compressAndSaveImage(file, productData) {
   try {
@@ -429,7 +446,6 @@ async function compressAndSaveImage(file, productData) {
     alert('Error compressing image. Please try again.');
   }
 }
-
 // Compress image helper function
 function compressImage(base64, quality = 0.7) {
   return new Promise((resolve) => {
@@ -461,7 +477,6 @@ function compressImage(base64, quality = 0.7) {
     };
   });
 }
-
 // Show Enlarged Image Modal
 function showEnlargedImage(imageUrl) {
   if (uiImageModal.imageModal && uiImageModal.enlargedImage) {
@@ -469,16 +484,155 @@ function showEnlargedImage(imageUrl) {
     uiImageModal.imageModal.style.display = 'block';
   }
 }
-
 // Hide Enlarged Image Modal
 function hideEnlargedImage() {
   if (uiImageModal.imageModal) {
     uiImageModal.imageModal.style.display = 'none';
   }
 }
-
 // Check dark mode on page load
 checkDarkModePreference();
-
 // Initialize the app
 init();
+
+
+
+
+
+// New DOM Elements for Income Section
+const uiIncome = {
+  incomeForm: document.getElementById('incomeForm'),
+  incomeDate: document.getElementById('incomeDate'),
+  incomeAmount: document.getElementById('incomeAmount'),
+  incomeBody: document.getElementById('incomeBody'),
+  incomeSearchInput: document.getElementById('incomeSearchInput')
+};
+
+let incomes = []; // Array to store income data
+
+// Load Income Data from Firestore
+function loadIncomes() {
+  showLoading();
+  db.collection('incomes').get()
+    .then((querySnapshot) => {
+      incomes = [];
+      querySnapshot.forEach((doc) => {
+        incomes.push({ id: doc.id, ...doc.data() });
+      });
+      renderIncomes();
+      hideLoading();
+    })
+    .catch((error) => {
+      console.error('Error loading incomes: ', error);
+      hideLoading();
+    });
+}
+
+// Render Incomes
+function renderIncomes(filteredIncomes = incomes) {
+  uiIncome.incomeBody.innerHTML = '';
+  filteredIncomes.forEach((income) => {
+    const row = createIncomeRow(income);
+    uiIncome.incomeBody.appendChild(row);
+  });
+}
+
+// Create Income Row
+function createIncomeRow(income) {
+  const row = document.createElement('tr');
+  row.innerHTML = `
+    <td>${income.date || 'N/A'}</td>
+    <td>$${income.amount.toFixed(2)}</td>
+    <td>
+      <button class="danger-btn delete-income-btn" data-id="${income.id}">Delete</button>
+    </td>
+  `;
+  // Add event listener to the delete button
+  row.querySelector('.delete-income-btn').addEventListener('click', () => deleteIncome(income.id));
+  return row;
+}
+
+// Save Income to Firestore
+function saveIncome() {
+  const incomeData = {
+    date: uiIncome.incomeDate.value.trim(),
+    amount: parseFloat(uiIncome.incomeAmount.value.trim()) || 0,
+  };
+
+  if (!incomeData.date || incomeData.amount <= 0) {
+    alert('Please enter a valid date and income amount.');
+    return;
+  }
+
+  showLoading();
+  db.collection('incomes').add(incomeData)
+    .then(() => {
+      loadIncomes();
+      uiIncome.incomeForm.reset();
+      hideLoading();
+    })
+    .catch((error) => {
+      console.error('Error adding income: ', error);
+      hideLoading();
+      alert('Error adding income: ' + error.message);
+    });
+}
+
+// Delete Income
+function deleteIncome(id) {
+  if (confirm('Are you sure you want to delete this income entry?')) {
+    showLoading();
+    db.collection('incomes').doc(id).delete()
+      .then(() => {
+        loadIncomes();
+        hideLoading();
+      })
+      .catch((error) => {
+        console.error('Error deleting income: ', error);
+        hideLoading();
+        alert('Error deleting income: ' + error.message);
+      });
+  }
+}
+
+// Search Incomes by Date
+function searchIncomes() {
+  const searchTerm = uiIncome.incomeSearchInput.value.trim().toLowerCase();
+  const filteredIncomes = incomes.filter(income =>
+    income.date.toLowerCase().includes(searchTerm)
+  );
+  renderIncomes(filteredIncomes);
+}
+
+// Setup Event Listeners for Income Section
+function setupIncomeEventListeners() {
+  if (uiIncome.incomeForm) {
+    uiIncome.incomeForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      saveIncome();
+    });
+  }
+  if (uiIncome.incomeSearchInput) {
+    uiIncome.incomeSearchInput.addEventListener('input', searchIncomes);
+  }
+}
+
+// Initialize Income Section
+function initIncomeSection() {
+  loadIncomes();
+  setupIncomeEventListeners();
+}
+
+// Initialize Income Section on App Load
+initIncomeSection();
+
+
+
+
+
+
+
+
+
+
+

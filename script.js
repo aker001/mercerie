@@ -33,6 +33,13 @@ let products = [];
 let editIndex = null; // Track the product being edited
 const DEFAULT_IMAGE = 'placeholder.jpg';
 
+// DOM Elements for Image Modal
+const uiImageModal = {
+  imageModal: document.getElementById('imageModal'),
+  enlargedImage: document.getElementById('enlargedImage'),
+  closeBtn: document.querySelector('#imageModal .close-btn')
+};
+
 // Show Loading
 function showLoading() {
   if (ui.loadingOverlay) {
@@ -94,6 +101,18 @@ function setupEventListeners() {
   }
   if (ui.darkModeToggle) {
     ui.darkModeToggle.addEventListener('click', toggleDarkMode);
+  }
+
+  // Add Event Listeners for Image Modal
+  if (uiImageModal.closeBtn) {
+    uiImageModal.closeBtn.addEventListener('click', hideEnlargedImage);
+  }
+  if (uiImageModal.imageModal) {
+    uiImageModal.imageModal.addEventListener('click', (e) => {
+      if (e.target === uiImageModal.imageModal) {
+        hideEnlargedImage();
+      }
+    });
   }
 }
 
@@ -157,13 +176,11 @@ function createProductRow(product, index) {
   const row = document.createElement('tr');
   const buyPrice = product.buyPrice ? product.buyPrice.toFixed(2) : "0.00";
   const sellPrice = product.sellPrice ? product.sellPrice.toFixed(2) : "0.00";
-
   // Calculate profit percentage
   let profitPercentage = "N/A";
   if (product.buyPrice > 0 && product.sellPrice) {
     profitPercentage = (((product.sellPrice - product.buyPrice) / product.buyPrice) * 100).toFixed(2);
   }
-
   row.innerHTML = `
     <td>${product.name || 'N/A'}</td>
     <td>${product.serial || 'N/A'}</td>
@@ -173,7 +190,7 @@ function createProductRow(product, index) {
     <td class="${parseFloat(profitPercentage) < 0 ? 'negative' : 'positive'}">
       ${profitPercentage}% Profit
     </td>
-    <td><img src="${product.imageUrl || DEFAULT_IMAGE}" class="image-preview" alt="Product"></td>
+    <td><img src="${product.imageUrl || DEFAULT_IMAGE}" class="image-preview clickable" alt="Product"></td>
     <td>
       <button class="primary-btn edit-btn" data-index="${index}">Edit</button>
       <button class="danger-btn delete-btn" data-index="${index}">Delete</button>
@@ -182,6 +199,15 @@ function createProductRow(product, index) {
   // Add event listeners to the buttons
   row.querySelector('.edit-btn').addEventListener('click', () => showEditModal(index));
   row.querySelector('.delete-btn').addEventListener('click', () => deleteProduct(index));
+
+  // Add click event to the image
+  const imageElement = row.querySelector('.image-preview');
+  if (imageElement) {
+    imageElement.addEventListener('click', () => {
+      showEnlargedImage(product.imageUrl || DEFAULT_IMAGE);
+    });
+  }
+
   return row;
 }
 
@@ -245,17 +271,14 @@ function createEditForm() {
 function showEditModal(index) {
   editIndex = index;
   const product = products[index];
-
   // Create the form first
   createEditForm();
-
   // Now set the values - this prevents the null reference error
   document.getElementById('productName').value = product.name || '';
   document.getElementById('productSerial').value = product.serial || '';
   document.getElementById('productQuantity').value = product.quantity || 0;
   document.getElementById('productBuyPrice').value = product.buyPrice || 0;
   document.getElementById('productSellPrice').value = product.sellPrice || 0;
-
   // Update image preview if available
   const imagePreview = document.getElementById('imagePreviewElement');
   if (imagePreview && product.imageUrl) {
@@ -273,22 +296,19 @@ function saveProduct() {
     buyPrice: parseFloat(document.getElementById('productBuyPrice').value.trim()) || 0,
     sellPrice: parseFloat(document.getElementById('productSellPrice').value.trim()) || 0,
   };
-
   // Handle the image
   const imageInput = document.getElementById('productImage');
   if (imageInput && imageInput.files && imageInput.files[0]) {
     const file = imageInput.files[0];
     // Check file size - limit to 1MB to avoid Firestore document size limits
     if (file.size > 1024 * 1024) {
-      alert('Image is too large. Please select an image smaller than 1MB.');
+      compressAndSaveImage(file, productData); // Compress and save the image
       return;
     }
     showLoading();
     const reader = new FileReader();
     reader.onload = (e) => {
-      // Store the base64 data
       productData.imageUrl = e.target.result;
-      // Now save to Firestore
       saveToFirestore(productData);
     };
     reader.readAsDataURL(file);
@@ -394,7 +414,23 @@ function exportToCSV() {
   document.body.removeChild(link);
 }
 
-// Compress image before storing (optional helper function)
+// Compress image before storing
+async function compressAndSaveImage(file, productData) {
+  try {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = async (e) => {
+      const compressedImage = await compressImage(e.target.result, 0.7); // Compress to 70% quality
+      productData.imageUrl = compressedImage;
+      saveToFirestore(productData);
+    };
+  } catch (error) {
+    console.error('Error compressing image:', error);
+    alert('Error compressing image. Please try again.');
+  }
+}
+
+// Compress image helper function
 function compressImage(base64, quality = 0.7) {
   return new Promise((resolve) => {
     const img = new Image();
@@ -424,6 +460,21 @@ function compressImage(base64, quality = 0.7) {
       resolve(canvas.toDataURL('image/jpeg', quality));
     };
   });
+}
+
+// Show Enlarged Image Modal
+function showEnlargedImage(imageUrl) {
+  if (uiImageModal.imageModal && uiImageModal.enlargedImage) {
+    uiImageModal.enlargedImage.src = imageUrl;
+    uiImageModal.imageModal.style.display = 'block';
+  }
+}
+
+// Hide Enlarged Image Modal
+function hideEnlargedImage() {
+  if (uiImageModal.imageModal) {
+    uiImageModal.imageModal.style.display = 'none';
+  }
 }
 
 // Check dark mode on page load

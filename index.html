@@ -46,8 +46,8 @@
                 <th>Product Name</th>
                 <th>Serial Number</th>
                 <th>Quantity</th>
-                <th>sell Price</th>
                 <th>buy Price</th>
+                <th>sell Price</th>
                 <th>Profit</th>
                 <th>Image</th>
                 <th>Actions</th>
@@ -79,6 +79,16 @@
   <div id="loading" style="display:none;">Loading...</div>
 
 
-  <script src="script.js"></script>
+
+  <!-- Enlarge Image Modal -->
+<div id="imageModal" class="modal">
+  <div class="modal-content">
+    <span class="close-btn">&times;</span>
+    <img id="enlargedImage" class="enlarged-image" alt="Enlarged Product Image">
+  </div>
+</div>
+
+
+  <script type="module" src="script.js"></script>
 </body>
 </html>
